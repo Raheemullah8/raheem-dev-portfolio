@@ -30,7 +30,7 @@ export default function Home() {
 
   // UI state
   const [loadProgress, setLoadProgress] = useState<number>(0);
-  const [, setIsInitialReady] = useState<boolean>(false);
+  const [isInitialReady, setIsInitialReady] = useState<boolean>(false);
   const [hasScrolled, setHasScrolled] = useState<boolean>(false);
   const [currentFrameDisplay, setCurrentFrameDisplay] = useState<number>(1);
   const [smoothProgress, setSmoothProgress] = useState<number>(0);
@@ -126,41 +126,66 @@ export default function Home() {
       setIsInitialReady(true);
     };
 
-    // Load remaining frames with concurrency
+    // 2-Stage Smart Preloading:
+    // Stage 1: Load anchor frames across the full timeline (step = 5, ~60 frames)
+    // Stage 2: Background fill of all intermediate detail frames
     const loadRemainingFrames = async () => {
-      const concurrency = 6;
-      let nextIndex = 1;
-
-      const worker = async () => {
-        while (nextIndex <= TOTAL_FRAMES && !isCancelled) {
-          const indexToLoad = nextIndex++;
-          if (indexToLoad === 1 && imagesRef.current[1]) continue;
-
-          await new Promise<void>((resolve) => {
-            const img = new window.Image();
-            img.src = FRAME_PATH(indexToLoad);
-            img.onload = () => {
-              if (!isCancelled) {
-                imagesRef.current[indexToLoad] = img;
-                loadedFramesRef.current.add(indexToLoad);
-                loadedCount++;
-                setLoadProgress(Math.floor((loadedCount / TOTAL_FRAMES) * 100));
-              }
-              resolve();
-            };
-            img.onerror = () => {
-              if (!isCancelled) {
-                loadedCount++;
-                setLoadProgress(Math.floor((loadedCount / TOTAL_FRAMES) * 100));
-              }
-              resolve();
-            };
-          });
-        }
+      // Helper function to load a single frame
+      const fetchFrame = (index: number): Promise<void> => {
+        return new Promise<void>((resolve) => {
+          if (loadedFramesRef.current.has(index) || isCancelled) {
+            resolve();
+            return;
+          }
+          const img = new window.Image();
+          img.src = FRAME_PATH(index);
+          img.onload = () => {
+            if (!isCancelled) {
+              imagesRef.current[index] = img;
+              loadedFramesRef.current.add(index);
+              loadedCount++;
+              setLoadProgress(Math.floor((loadedCount / TOTAL_FRAMES) * 100));
+            }
+            resolve();
+          };
+          img.onerror = () => {
+            if (!isCancelled) {
+              loadedCount++;
+              setLoadProgress(Math.floor((loadedCount / TOTAL_FRAMES) * 100));
+            }
+            resolve();
+          };
+        });
       };
 
-      const workers = Array.from({ length: concurrency }, () => worker());
-      await Promise.all(workers);
+      // Concurrent pool runner
+      const runPool = async (queue: number[], concurrency: number) => {
+        let cursor = 0;
+        const worker = async () => {
+          while (cursor < queue.length && !isCancelled) {
+            const idx = queue[cursor++];
+            await fetchFrame(idx);
+          }
+        };
+        const workers = Array.from({ length: concurrency }, () => worker());
+        await Promise.all(workers);
+      };
+
+      // 1. High-priority anchor frames (every 5th frame across 1..300)
+      const anchorFrames: number[] = [];
+      for (let i = 5; i <= TOTAL_FRAMES; i += 5) {
+        anchorFrames.push(i);
+      }
+      await runPool(anchorFrames, 8);
+
+      // 2. Background detail frames (the remaining in-between frames)
+      const detailFrames: number[] = [];
+      for (let i = 2; i <= TOTAL_FRAMES; i++) {
+        if (i % 5 !== 0) {
+          detailFrames.push(i);
+        }
+      }
+      await runPool(detailFrames, 4);
     };
 
     loadRemainingFrames();
@@ -449,7 +474,7 @@ export default function Home() {
         />
 
         {/* Full-screen Loading Overlay with animations */}
-        <LoadingScreen loadProgress={loadProgress} />
+        <LoadingScreen loadProgress={loadProgress} isInitialReady={isInitialReady} />
       </div>
     </div>
   );

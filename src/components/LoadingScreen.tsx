@@ -1,47 +1,93 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Terminal, Sparkles } from "lucide-react";
+import { Terminal, Sparkles, ArrowRight } from "lucide-react";
 
 interface LoadingScreenProps {
   loadProgress: number;
+  isInitialReady?: boolean;
 }
 
-export default function LoadingScreen({ loadProgress }: LoadingScreenProps) {
+export default function LoadingScreen({
+  loadProgress,
+  isInitialReady = false,
+}: LoadingScreenProps) {
   const [isDone, setIsDone] = useState<boolean>(false);
   const [shouldRender, setShouldRender] = useState<boolean>(true);
+  const [displayProgress, setDisplayProgress] = useState<number>(10);
+  const [showSkip, setShowSkip] = useState<boolean>(false);
 
+  // Fast simulated progress from 0% to 100% in ~1.2s once initial canvas frame is ready
   useEffect(() => {
-    if (loadProgress >= 100) {
-      // Small delay to allow the user to see 100% completion
-      const timer = setTimeout(() => {
-        setIsDone(true);
-      }, 400);
+    const timer = setInterval(() => {
+      setDisplayProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(timer);
+          return 100;
+        }
+        // Accelerate smoothly
+        const increment = isInitialReady
+          ? Math.floor(Math.random() * 12) + 10
+          : Math.floor(Math.random() * 6) + 4;
+        return Math.min(100, prev + increment);
+      });
+    }, 60);
 
-      // Remove from DOM after fade out transition completes
+    return () => clearInterval(timer);
+  }, [isInitialReady]);
+
+  // When progress reaches 100%, trigger smooth fade out
+  useEffect(() => {
+    if (displayProgress >= 100) {
+      const exitTimer = setTimeout(() => {
+        setIsDone(true);
+      }, 250);
+
       const unmountTimer = setTimeout(() => {
         setShouldRender(false);
-      }, 1200);
+      }, 950);
 
       return () => {
-        clearTimeout(timer);
+        clearTimeout(exitTimer);
         clearTimeout(unmountTimer);
       };
     }
-  }, [loadProgress]);
+  }, [displayProgress]);
+
+  // Show quick "Enter Portfolio" skip option after 800ms
+  useEffect(() => {
+    const skipTimer = setTimeout(() => {
+      setShowSkip(true);
+    }, 800);
+    return () => clearTimeout(skipTimer);
+  }, []);
+
+  // Hard safety timeout: ALWAYS dismiss loader after maximum 2.0s even on slow 3G
+  useEffect(() => {
+    const safetyTimer = setTimeout(() => {
+      setDisplayProgress(100);
+      setIsDone(true);
+      setTimeout(() => setShouldRender(false), 800);
+    }, 2000);
+
+    return () => clearTimeout(safetyTimer);
+  }, []);
+
+  const handleSkip = () => {
+    setDisplayProgress(100);
+    setIsDone(true);
+    setTimeout(() => setShouldRender(false), 500);
+  };
 
   if (!shouldRender) return null;
 
   // Dynamic status text according to progress
   const getStatusText = (progress: number) => {
-    if (progress < 25) return "Initializing 3D visual canvas...";
-    if (progress < 60) return "Preloading interactive frames...";
-    if (progress < 90) return "Buffering high-resolution sequence...";
-    if (progress < 100) return "Finalizing workspace...";
+    if (progress < 35) return "Initializing visual canvas...";
+    if (progress < 75) return "Buffering interactive sequence...";
+    if (progress < 100) return "Polishing developer workspace...";
     return "Experience ready";
   };
-
-  const clampedProgress = Math.min(100, Math.max(0, loadProgress));
 
   return (
     <div
@@ -58,9 +104,9 @@ export default function LoadingScreen({ loadProgress }: LoadingScreenProps) {
 
       {/* Main Container */}
       <div className="relative z-10 flex flex-col items-center text-center px-6 max-w-sm w-full">
-        {/* Animated Futuristic Loader Ring */}
+        {/* Animated Futuristic Loader Ring with Logo */}
         <div className="relative w-24 h-24 mb-7 flex items-center justify-center">
-          {/* Subtle Outer Pulsing Halo */}
+          {/* Outer Pulsing Halo */}
           <div className="absolute inset-0 rounded-full bg-orange-500/10 animate-ping" />
 
           {/* Outer Spin Ring */}
@@ -72,15 +118,19 @@ export default function LoadingScreen({ loadProgress }: LoadingScreenProps) {
             style={{ animation: "spin 2.5s linear infinite reverse" }}
           />
 
-          {/* Center Glowing Icon */}
-          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-zinc-900 to-black border border-orange-500/40 flex items-center justify-center shadow-[0_0_25px_rgba(249,115,22,0.4)]">
-            <Terminal className="w-6 h-6 text-orange-400 animate-pulse" />
+          {/* Center Glowing Logo */}
+          <div className="w-14 h-14 rounded-full overflow-hidden border border-orange-500/50 shadow-[0_0_25px_rgba(249,115,22,0.45)] bg-black flex items-center justify-center">
+            <img
+              src="/logo.png"
+              alt="Raheem Ullah Logo"
+              className="w-full h-full object-cover"
+            />
           </div>
         </div>
 
         {/* Branding & Subtitle */}
-        <div className="space-y-1 mb-8">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-2">
+        <div className="space-y-1 mb-6">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-1.5">
             <Sparkles className="w-3 h-3 text-orange-400" />
             <span>Interactive Portfolio</span>
           </div>
@@ -93,11 +143,11 @@ export default function LoadingScreen({ loadProgress }: LoadingScreenProps) {
         </div>
 
         {/* Progress Bar Container */}
-        <div className="w-full space-y-2.5">
+        <div className="w-full space-y-2">
           <div className="h-1.5 w-full bg-zinc-900/90 rounded-full overflow-hidden border border-white/10 p-[1px] relative">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-orange-600 via-orange-500 to-amber-400 transition-all duration-300 ease-out shadow-[0_0_14px_rgba(249,115,22,0.8)] relative"
-              style={{ width: `${clampedProgress}%` }}
+              className="h-full rounded-full bg-gradient-to-r from-orange-600 via-orange-500 to-amber-400 transition-all duration-200 ease-out shadow-[0_0_14px_rgba(249,115,22,0.8)] relative"
+              style={{ width: `${displayProgress}%` }}
             >
               {/* Shimmer light bar */}
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-pulse" />
@@ -109,19 +159,25 @@ export default function LoadingScreen({ loadProgress }: LoadingScreenProps) {
             <span className="flex items-center gap-1.5 truncate">
               <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
               <span className="text-zinc-300 truncate">
-                {getStatusText(clampedProgress)}
+                {getStatusText(displayProgress)}
               </span>
             </span>
             <span className="text-orange-400 font-bold ml-2 tabular-nums">
-              {String(clampedProgress).padStart(2, "0")}%
+              {String(displayProgress).padStart(2, "0")}%
             </span>
           </div>
         </div>
 
-        {/* Bottom Hint */}
-        <div className="mt-8 text-[10px] font-mono text-zinc-500 uppercase tracking-[0.2em]">
-          Loading 300 Interactive Frames
-        </div>
+        {/* Skip button for instant entrance */}
+        {showSkip && (
+          <button
+            onClick={handleSkip}
+            className="mt-6 px-4 py-1.5 rounded-full glass-pill hover:bg-orange-500/20 text-orange-300 hover:text-white border border-orange-500/40 text-xs font-mono flex items-center gap-1.5 active:scale-95 transition-all animate-in fade-in duration-300"
+          >
+            <span>Enter Portfolio</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );

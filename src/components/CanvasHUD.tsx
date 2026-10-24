@@ -30,7 +30,9 @@ export default function CanvasHUD({
       {/* Minimal Loading Status */}
       <div
         className={`fixed top-16 sm:top-6 right-3.5 sm:right-6 z-30 flex items-center gap-2 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-black/75 backdrop-blur-md border border-white/10 text-[11px] sm:text-xs font-mono tracking-wider transition-opacity duration-700 ${
-          loadProgress >= 100 ? "opacity-0 pointer-events-none" : "opacity-100"
+          loadProgress >= 20 || hasScrolled
+            ? "opacity-0 pointer-events-none"
+            : "opacity-100"
         }`}
       >
         <span className="relative flex h-2 w-2">
@@ -38,9 +40,7 @@ export default function CanvasHUD({
           <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500" />
         </span>
         <span className="text-zinc-300">
-          {loadProgress < 100
-            ? `Loading frames ${loadProgress}%`
-            : "Frames ready"}
+          {loadProgress < 20 ? "Optimizing 3D..." : "HD Ready"}
         </span>
       </div>
     </>
